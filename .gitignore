@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+*.so
+
+# Virtual environment
+venv/
+.env/
+.venv/
+env/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Config local (no subir configuraciones personales)
+config.json
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
