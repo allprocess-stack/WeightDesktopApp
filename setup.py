@@ -36,7 +36,7 @@ executable = Executable(
     script="main.py",
     target_name="DesktopViewWeight",
     base="gui",
-    icon=None,
+    icon="/icon.ico",
 )
 
 setup(

@@ -28,6 +28,22 @@ env/
 # Config local (no subir configuraciones personales)
 config.json
 
+# Generados por el build del .msi / .exe
+*.msi
+*.msm
+*.exe
+*.spec
+
+# WiX toolchain
+*.wixobj
+*.wixpdb
+
+# Tests / coverage
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
 # OS
 Thumbs.db
 .DS_Store
