@@ -3,6 +3,10 @@ import threading
 
 
 class TramaParser:
+    """Interpreta tramas de peso desde un buffer acumulado thread-safe.
+    Los datos se insertan vía alimentar() desde el hilo de lectura del serial
+    y se parsean desde el hilo de UI en leer()."""
+
     def __init__(self) -> None:
         self.trama: str = ""
         self.peso_str: str = ""
@@ -12,21 +16,26 @@ class TramaParser:
         self._lock = threading.Lock()
 
     def alimentar(self, datos: str) -> None:
+        """Acumula datos crudos en el buffer interno. Thread-safe."""
         if not datos:
             return
         with self._lock:
             self._buffer.append(datos)
 
     def limpiar_buffer(self) -> None:
+        """Limpia el buffer acumulado. Se usa al cambiar el tipo de trama."""
         with self._lock:
             self._buffer.clear()
 
     def limpiar(self) -> None:
+        """Limpia todos los datos: trama parseada, peso y buffer interno."""
         self.trama = ""
         self.peso_str = ""
         self.limpiar_buffer()
 
     def leer(self) -> None:
+        """Parsea el buffer según el tipo de trama activo.
+        Si encuentra una trama válida, actualiza peso_str y consume del buffer."""
         with self._lock:
             buffer = "".join(self._buffer)
 
@@ -45,6 +54,7 @@ class TramaParser:
                 self._parsear_xkr(buffer)
 
     def _consumir_buffer(self, cantidad: int) -> None:
+        """Remueve los primeros `cantidad` caracteres del buffer. Thread-safe."""
         if cantidad <= 0:
             return
         with self._lock:
@@ -55,6 +65,7 @@ class TramaParser:
                 self._buffer = [texto[cantidad:]]
 
     def _parsear_xkr(self, buffer: str) -> None:
+        """Formato XKR: STX (\\x02) + signo (+/-) + dígitos de peso variables."""
         stx_idx = buffer.find("\x02")
         if stx_idx < 0:
             return
@@ -88,9 +99,12 @@ class TramaParser:
             pass
 
     def _parsear_xk310(self, buffer: str) -> None:
+        """XK310 tiene la misma estructura que XKR."""
         self._parsear_xkr(buffer)
 
     def _parsear_ft11(self, buffer: str) -> None:
+        """FT11: STX (\\x02) + codec (2 bytes) + 6 dígitos de peso fijos.
+        Requiere al menos 10 bytes desde STX."""
         stx_idx = buffer.find("\x02")
         if stx_idx < 0:
             return
@@ -117,6 +131,7 @@ class TramaParser:
             pass
 
     def _parsear_generic(self, buffer: str) -> None:
+        """Generic: busca el primer número con signo opcional mediante regex."""
         try:
             match = re.search(r"(-?\d+)", buffer)
             if not match:

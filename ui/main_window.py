@@ -19,11 +19,17 @@ from ui.login_dialog import LoginDialog
 
 
 class MainWindow(QMainWindow):
+    """Ventana principal de la aplicación. Muestra el peso leído desde la báscula
+    en un label de gran tamaño. Contiene barra de estado con login, configuración
+    de puerto serie y botón de cierre."""
+
     peso_listo = pyqtSignal()
 
     TIPOS_TRAMA = ["XKR", "XK310", "FT11", "Generic"]
 
     def __init__(self):
+        """Inicializa la ventana: 800x450, sin bordes, fondo negro.
+        Configura el parser de tramas, el watchdog de reconexión y la UI."""
         super().__init__()
         self.setWindowTitle("DesktopViewWeight")
         self.setGeometry(0, 0, 800, 450)
@@ -41,6 +47,8 @@ class MainWindow(QMainWindow):
         self._init_watchdog()
 
     def _init_ui(self):
+        """Construye la interfaz: label de peso (256x128, naranja, bold),
+        barra de estado con login, panel de configuración y botón cerrar."""
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
@@ -118,6 +126,7 @@ class MainWindow(QMainWindow):
         self._status_bar.addPermanentWidget(self._btn_cerrar_app)
 
     def _estilizar_combo(self, combo: QComboBox):
+        """Aplica estilo oscuro a un QComboBox."""
         combo.setStyleSheet(
             "QComboBox { background: #333; color: white; border: 1px solid #555; "
             "padding: 2px 4px; }"
@@ -126,6 +135,7 @@ class MainWindow(QMainWindow):
         )
 
     def _estilizar_boton(self, btn: QPushButton):
+        """Aplica estilo oscuro a un QPushButton."""
         btn.setStyleSheet(
             "QPushButton { background: #333; color: white; border: 1px solid #555; "
             "padding: 4px 8px; }"
@@ -133,6 +143,8 @@ class MainWindow(QMainWindow):
         )
 
     def _on_login(self):
+        """Abre el diálogo de login. Si las credenciales son root/systemconfig,
+        muestra el panel de configuración y enumera los puertos COM."""
         dialog = LoginDialog(self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             user, password = dialog.credenciales()
@@ -150,6 +162,8 @@ class MainWindow(QMainWindow):
                 )
 
     def enumerar_puertos(self):
+        """Actualiza el ComboBox con los puertos COM disponibles
+        y mantiene la selección actual si sigue existiendo."""
         seleccionado = self._cbx_com.currentText()
         self._cbx_com.blockSignals(True)
         self._cbx_com.clear()
@@ -160,14 +174,19 @@ class MainWindow(QMainWindow):
         self._cbx_com.blockSignals(False)
 
     def _on_trama_changed(self, texto: str):
+        """Se ejecuta al cambiar el tipo de trama. Limpia el buffer interno
+        para evitar falsos positivos con datos del formato anterior."""
         self._trama_cambiada = True
         self._parser.tipo_trama = texto
         self._parser.limpiar_buffer()
 
     def _on_com_changed(self, texto: str):
+        """Marca que hubo un cambio de puerto COM."""
         self._trama_cambiada = True
 
     def _on_abrir(self):
+        """Abre el puerto serie seleccionado: cierra conexión previa,
+        resetea el driver, configura el tipo de trama e inicia la lectura."""
         puerto = self._cbx_com.currentText()
         if not puerto:
             QMessageBox.warning(self, "Aviso", "Seleccione un puerto COM.")
@@ -192,21 +211,27 @@ class MainWindow(QMainWindow):
         self._set_controles_habilitados(False)
 
     def _on_cerrar(self):
+        """Cierra la conexión serie actual y restaura la UI."""
         self._cerrar_conexion()
         self._peso_label.setText("-----")
         self._restaurar_fuente()
         self._set_controles_habilitados(True)
 
     def _cerrar_conexion(self):
+        """Cierra la conexión serie si existe y libera el recurso."""
         if self._connection is not None:
             self._connection.cerrar()
             self._connection = None
 
     def _on_datos_recibidos(self, datos: str):
+        """Callback llamado desde el hilo de lectura del serial.
+        Alimenta el parser y emite la señal para actualizar la UI en el hilo principal."""
         self._parser.alimentar(datos)
         self.peso_listo.emit()
 
     def _actualizar_peso(self):
+        """Ejecutado en el hilo de UI vía la señal peso_listo.
+        Parsea el buffer acumulado y actualiza el label con el peso."""
         if self._connection is None or not self._connection.is_open:
             return
         self._parser.leer()
@@ -219,6 +244,8 @@ class MainWindow(QMainWindow):
             self._restaurar_fuente()
 
     def _ajustar_fuente(self):
+        """Reduce el tamaño de fuente proporcionalmente si el peso
+        supera los 4 caracteres (mínimo 12pt)."""
         largo = len(self._peso_label.text())
         if largo <= 4:
             self._restaurar_fuente()
@@ -230,17 +257,21 @@ class MainWindow(QMainWindow):
             self._peso_label.setFont(fuente)
 
     def _restaurar_fuente(self):
+        """Restaura el tamaño de fuente original (48pt)."""
         fuente = self._peso_label.font()
         if abs(fuente.pointSizeF() - 48) > 0.5:
             self._peso_label.setFont(self._fuente_original)
 
     def _set_controles_habilitados(self, habilitado: bool):
+        """Habilita o deshabilita los controles de configuración
+        según el estado de la conexión serie."""
         self._cbx_com.setEnabled(habilitado)
         self._cbx_tramas.setEnabled(habilitado)
         self._btn_abrir.setEnabled(habilitado)
         self._btn_cerrar.setEnabled(not habilitado)
 
     def _on_guardar_config(self):
+        """Guarda la configuración actual (puerto COM y tipo de trama) en JSON."""
         try:
             config = ConfigManager()
             config.tipo_trama = self._cbx_tramas.currentText()
@@ -251,6 +282,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Error", f"No se pudo guardar: {e}")
 
     def _on_cerrar_app(self):
+        """Muestra confirmación y cierra la aplicación si el usuario acepta."""
         resp = QMessageBox.question(
             self, "Confirmar cierre",
             "¿Está seguro de que desea cerrar el programa?",
@@ -260,10 +292,14 @@ class MainWindow(QMainWindow):
             self.close()
 
     def _init_watchdog(self):
+        """Inicializa el QTimer para el watchdog de reconexión automática."""
         self._watchdog = QTimer(self)
         self._watchdog.timeout.connect(self._watchdog_tick)
 
     def _watchdog_tick(self):
+        """Watchdog de reconexión en 2 fases:
+        Fase 1 — Puerto no aparece en el sistema: reintenta cada 3s (máx 30).
+        Fase 2 — Puerto existe pero Open() falla: backoff 2.5s→10s (máx 40)."""
         self._reintentos_apertura += 1
         puerto = self._cbx_com.currentText()
         if not puerto:
@@ -308,6 +344,8 @@ class MainWindow(QMainWindow):
                 )
 
     def cargar_configuracion(self):
+        """Carga la configuración guardada y la aplica a los ComboBox.
+        Devuelve el ConfigManager si existe, None en caso contrario."""
         config = ConfigManager.cargar()
         if config is not None:
             idx_trama = self._cbx_tramas.findText(config.tipo_trama)
@@ -321,12 +359,14 @@ class MainWindow(QMainWindow):
             return config
 
     def iniciar_reconexion(self):
+        """Inicia el watchdog de reconexión con un delay inicial de 5 segundos."""
         if self._cbx_com.currentText():
             self._reintentos_apertura = 0
             self._watchdog.setInterval(5000)
             self._watchdog.start()
 
     def closeEvent(self, event):
+        """Al cerrar la ventana, detiene el watchdog y cierra la conexión serie."""
         self._watchdog.stop()
         self._cerrar_conexion()
         super().closeEvent(event)
