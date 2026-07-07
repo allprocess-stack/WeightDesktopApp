@@ -19,6 +19,8 @@ def main():
     if config is not None:
         wnd.iniciar_reconexion()
 
+    app.aboutToQuit.connect(wnd.cerrar_conexion)
+
     sys.exit(app.exec())
 
 

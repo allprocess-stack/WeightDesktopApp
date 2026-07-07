@@ -1,6 +1,7 @@
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
+    QDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -16,6 +17,25 @@ from config.config_manager import ConfigManager
 from core.serial_connection import SerialConnection
 from core.trama_parser import TramaParser
 from ui.login_dialog import LoginDialog
+
+
+class PortOpener(QThread):
+    resultado = pyqtSignal(object, str)
+
+    def __init__(self, puerto: str, callback):
+        super().__init__()
+        self.puerto = puerto
+        self.callback = callback
+
+    def run(self):
+        conn = SerialConnection(self.callback)
+        conn.resetear_puerto(self.puerto)
+        try:
+            conn.abrir(self.puerto)
+            self.resultado.emit(conn, "")
+        except Exception as e:
+            conn.cerrar()
+            self.resultado.emit(None, str(e))
 
 
 class MainWindow(QMainWindow):
@@ -40,6 +60,7 @@ class MainWindow(QMainWindow):
         self._connection: SerialConnection | None = None
         self._reintentos_apertura = 0
         self._trama_cambiada = False
+        self._abriendo = False
 
         self.peso_listo.connect(self._actualizar_peso)
 
@@ -120,6 +141,14 @@ class MainWindow(QMainWindow):
         self._status_bar.addWidget(self._config_widget)
         self._config_widget.setVisible(False)
 
+        self._lbl_conexion = QLabel("Desconectado")
+        self._lbl_conexion.setStyleSheet("color: #FF4444; padding: 2px 8px;")
+        self._status_bar.addPermanentWidget(self._lbl_conexion)
+
+        self._lbl_trama = QLabel("Trama: ---")
+        self._lbl_trama.setStyleSheet("color: #888888; padding: 2px 8px;")
+        self._status_bar.addPermanentWidget(self._lbl_trama)
+
         self._btn_cerrar_app = QPushButton("Cerrar App")
         self._btn_cerrar_app.clicked.connect(self._on_cerrar_app)
         self._estilizar_boton(self._btn_cerrar_app)
@@ -192,36 +221,75 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Aviso", "Seleccione un puerto COM.")
             return
 
-        self._cerrar_conexion()
+        self.cerrar_conexion()
         self._parser.tipo_trama = self._cbx_tramas.currentText()
         self._parser.limpiar()
 
-        conn = SerialConnection(self._on_datos_recibidos)
-        conn.resetear_puerto(puerto)
-        try:
-            conn.abrir(puerto)
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"No se pudo abrir {puerto}: {e}")
-            return
-
-        self._connection = conn
-        self._trama_cambiada = False
-        self._peso_label.setText("-----")
-        self._restaurar_fuente()
         self._set_controles_habilitados(False)
+        self._lbl_conexion.setText("Conectando...")
+        self._lbl_conexion.setStyleSheet("color: #FFAA00; padding: 2px 8px;")
+
+        self._opener = PortOpener(puerto, self._on_datos_recibidos)
+        self._opener.resultado.connect(self._on_port_open_result)
+        self._opener.start()
+
+    def _on_port_open_result(self, conn: object, error: str):
+        self._abriendo = False
+        self._opener = None
+        if conn is not None:
+            self._connection = conn
+            self._trama_cambiada = False
+            self._peso_label.setText("-----")
+            self._restaurar_fuente()
+            self._actualizar_estado_conexion(True)
+        else:
+            self._set_controles_habilitados(True)
+            self._actualizar_estado_conexion(False)
+            QMessageBox.critical(self, "Error", f"No se pudo abrir el puerto: {error}")
+
+    def _on_watchdog_open_result(self, conn: object, error: str):
+        self._abriendo = False
+        self._opener = None
+        if conn is not None:
+            self._connection = conn
+            self._watchdog.stop()
+            self._set_controles_habilitados(False)
+            self._peso_label.setText("-----")
+            self._actualizar_estado_conexion(True)
+        else:
+            if self._reintentos_apertura >= 40:
+                self._watchdog.stop()
+                QMessageBox.warning(
+                    self, "Error de conexión",
+                    f"No se pudo abrir el puerto tras "
+                    f"{self._reintentos_apertura} intentos."
+                )
+            else:
+                self._watchdog.setInterval(
+                    min(2500 + self._reintentos_apertura * 500, 10000)
+                )
 
     def _on_cerrar(self):
-        """Cierra la conexión serie actual y restaura la UI."""
-        self._cerrar_conexion()
+        self.cerrar_conexion()
         self._peso_label.setText("-----")
         self._restaurar_fuente()
         self._set_controles_habilitados(True)
 
-    def _cerrar_conexion(self):
-        """Cierra la conexión serie si existe y libera el recurso."""
+    def cerrar_conexion(self):
         if self._connection is not None:
             self._connection.cerrar()
             self._connection = None
+            self._actualizar_estado_conexion(False)
+            self._lbl_trama.setText("Trama: ---")
+            self._lbl_trama.setStyleSheet("color: #888888; padding: 2px 8px;")
+
+    def _actualizar_estado_conexion(self, conectado: bool):
+        if conectado:
+            self._lbl_conexion.setText("Conectado")
+            self._lbl_conexion.setStyleSheet("color: #44FF44; padding: 2px 8px;")
+        else:
+            self._lbl_conexion.setText("Desconectado")
+            self._lbl_conexion.setStyleSheet("color: #FF4444; padding: 2px 8px;")
 
     def _on_datos_recibidos(self, datos: str):
         """Callback llamado desde el hilo de lectura del serial.
@@ -239,9 +307,13 @@ class MainWindow(QMainWindow):
             self._trama_cambiada = False
             self._peso_label.setText(self._parser.peso_str)
             self._ajustar_fuente()
+            self._lbl_trama.setText("Trama: Recibiendo")
+            self._lbl_trama.setStyleSheet("color: #44FF44; padding: 2px 8px;")
         elif self._trama_cambiada:
             self._peso_label.setText("Trama incorrecta")
             self._restaurar_fuente()
+            self._lbl_trama.setText("Trama: Incorrecta")
+            self._lbl_trama.setStyleSheet("color: #FFAA00; padding: 2px 8px;")
 
     def _ajustar_fuente(self):
         """Reduce el tamaño de fuente proporcionalmente si el peso
@@ -297,9 +369,9 @@ class MainWindow(QMainWindow):
         self._watchdog.timeout.connect(self._watchdog_tick)
 
     def _watchdog_tick(self):
-        """Watchdog de reconexión en 2 fases:
-        Fase 1 — Puerto no aparece en el sistema: reintenta cada 3s (máx 30).
-        Fase 2 — Puerto existe pero Open() falla: backoff 2.5s→10s (máx 40)."""
+        if self._abriendo:
+            return
+
         self._reintentos_apertura += 1
         puerto = self._cbx_com.currentText()
         if not puerto:
@@ -319,29 +391,15 @@ class MainWindow(QMainWindow):
             self._watchdog.setInterval(3000)
             return
 
-        self._cerrar_conexion()
+        self.cerrar_conexion()
         self._parser.limpiar()
+        self._abriendo = True
+        self._lbl_conexion.setText("Conectando...")
+        self._lbl_conexion.setStyleSheet("color: #FFAA00; padding: 2px 8px;")
 
-        conn = SerialConnection(self._on_datos_recibidos)
-        conn.resetear_puerto(puerto)
-        try:
-            conn.abrir(puerto)
-            self._connection = conn
-            self._watchdog.stop()
-            self._set_controles_habilitados(False)
-            self._peso_label.setText("-----")
-        except Exception:
-            if self._reintentos_apertura >= 40:
-                self._watchdog.stop()
-                QMessageBox.warning(
-                    self, "Error de conexión",
-                    f"No se pudo abrir {puerto} tras "
-                    f"{self._reintentos_apertura} intentos."
-                )
-            else:
-                self._watchdog.setInterval(
-                    min(2500 + self._reintentos_apertura * 500, 10000)
-                )
+        self._opener = PortOpener(puerto, self._on_datos_recibidos)
+        self._opener.resultado.connect(self._on_watchdog_open_result)
+        self._opener.start()
 
     def cargar_configuracion(self):
         """Carga la configuración guardada y la aplica a los ComboBox.
@@ -368,5 +426,5 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         """Al cerrar la ventana, detiene el watchdog y cierra la conexión serie."""
         self._watchdog.stop()
-        self._cerrar_conexion()
+        self.cerrar_conexion()
         super().closeEvent(event)

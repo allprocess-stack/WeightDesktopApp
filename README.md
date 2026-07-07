@@ -19,6 +19,8 @@ pip install -r requeriments.txt
 ```
 DesktopViewWeight/
 ├── main.py                       # Punto de entrada
+├── setup.py                      # Build para generar .msi (cx_Freeze)
+├── build_exe.ps1                 # Script para generar .exe (PyInstaller)
 ├── requeriments.txt              # Dependencias
 ├── config/
 │   ├── __init__.py
@@ -50,13 +52,18 @@ main()
   └─> Watchdog_Tick (QTimer)
         ├─> Fase 1: puerto no existe → reintenta cada 3s (máx 30)
         └─> Fase 2: puerto existe pero falla → backoff 2.5s→10s (máx 40)
+  └─> PortOpener (QThread) — apertura asincrona
+        ├─> resetear_puerto() → abre/cierra temporal
+        └─> abrir() → inicia hilo de lectura
   └─> SerialConnection (hilo daemon)
         ├─> read_all() → datos crudos
         └─> callback → TramaParser.Alimentar()
-  └─> ActualizarPeso (vía callback)
+  └─> peso_listo.emit() (pyqtSignal) → _actualizar_peso (hilo UI)
         └─> TramaParser.Leer() → QLabel.setText(peso)
+        └─> Actualiza labels: [Conectado] [Trama: Recibiendo]
   └─> [Login] → user: root / pass: systemconfig → muestra panel configuración
   └─> [Cerrar App] → confirmación → closeEvent → cerrar puerto
+  └─> aboutToQuit → cierre seguro al apagar Windows
 ```
 
 ## Tipos de trama soportados
@@ -103,6 +110,8 @@ main()
 - Controles deshabilitados mientras el puerto está abierto
 - Indicador "Trama incorrecta" al cambiar de formato
 - "Valor negativo excedido" si el peso baja de -999
+- Label de conexión en barra de estado: Conectado (verde) / Desconectado (rojo) / Conectando (amarillo)
+- Label de trama: Recibiendo (verde) / Incorrecta (naranja) / --- (gris)
 
 ### Persistencia
 - Configuración guardada en `%LOCALAPPDATA%\DesktopViewWeight\config.json`
@@ -131,6 +140,28 @@ main()
 ```
 
 Al iniciar la aplicación, si existe el archivo en `%LOCALAPPDATA%\DesktopViewWeight\config.json`, se carga automáticamente y se intenta abrir el puerto COM configurado con reintentos.
+
+## Generar instalador MSI
+
+Para distribuir la aplicación, puedes generar un instalador `.msi` con cx_Freeze:
+
+```bash
+# Instalar dependencias
+pip install -r requeriments.txt
+
+# Generar el .msi
+python setup.py bdist_msi
+```
+
+El instalador se crea en `dist\DesktopViewWeight-1.0.0-win64.msi`. Incluye todo lo necesario para ejecutarse en otra PC sin instalar Python ni dependencias.
+
+También puedes generar un `.exe` portátil con PyInstaller:
+
+```powershell
+.\build_exe.ps1
+```
+
+El ejecutable se crea en `dist\DesktopViewWeight.exe`.
 
 ---
 
