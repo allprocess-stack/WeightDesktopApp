@@ -12,7 +12,7 @@ def main():
     wnd = MainWindow()
     wnd.show()
 
-    wnd._enumerar_puertos()
+    wnd.enumerar_puertos()
     config = wnd.cargar_configuracion()
     if config is not None:
         wnd.iniciar_reconexion()

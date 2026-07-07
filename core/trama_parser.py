@@ -6,7 +6,7 @@ class TramaParser:
     def __init__(self) -> None:
         self.trama: str = ""
         self.peso_str: str = ""
-        self.tipo_trama: str = "FT11"
+        self.tipo_trama: str = "XKR"
 
         self._buffer: list[str] = []
         self._lock = threading.Lock()

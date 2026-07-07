@@ -1,5 +1,5 @@
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QFont, QAction
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -10,43 +10,17 @@ from PyQt6.QtWidgets import (
     QWidget,
     QComboBox,
     QMessageBox,
-    QDialog,
-    QLineEdit,
-    QFormLayout,
-    QDialogButtonBox,
 )
 
 from config.config_manager import ConfigManager
 from core.serial_connection import SerialConnection
 from core.trama_parser import TramaParser
-
-
-class LoginDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Iniciar sesión")
-        self.setFixedSize(280, 140)
-
-        self.usuario_input = QLineEdit()
-        self.contrasena_input = QLineEdit()
-        self.contrasena_input.setEchoMode(QLineEdit.EchoMode.Password)
-
-        layout = QFormLayout(self)
-        layout.addRow("Usuario:", self.usuario_input)
-        layout.addRow("Contraseña:", self.contrasena_input)
-
-        botones = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        botones.accepted.connect(self.accept)
-        botones.rejected.connect(self.reject)
-        layout.addRow(botones)
-
-    def credenciales(self):
-        return self.usuario_input.text(), self.contrasena_input.text()
+from ui.login_dialog import LoginDialog
 
 
 class MainWindow(QMainWindow):
+    peso_listo = pyqtSignal()
+
     TIPOS_TRAMA = ["XKR", "XK310", "FT11", "Generic"]
 
     def __init__(self):
@@ -60,6 +34,8 @@ class MainWindow(QMainWindow):
         self._connection: SerialConnection | None = None
         self._reintentos_apertura = 0
         self._trama_cambiada = False
+
+        self.peso_listo.connect(self._actualizar_peso)
 
         self._init_ui()
         self._init_watchdog()
@@ -162,7 +138,7 @@ class MainWindow(QMainWindow):
             user, password = dialog.credenciales()
             if user == "root" and password == "systemconfig":
                 self._config_widget.setVisible(True)
-                self._enumerar_puertos()
+                self.enumerar_puertos()
                 QMessageBox.information(
                     self, "Acceso concedido",
                     "Menú de configuración habilitado."
@@ -173,7 +149,7 @@ class MainWindow(QMainWindow):
                     "Usuario o contraseña incorrectos."
                 )
 
-    def _enumerar_puertos(self):
+    def enumerar_puertos(self):
         seleccionado = self._cbx_com.currentText()
         self._cbx_com.blockSignals(True)
         self._cbx_com.clear()
@@ -228,7 +204,7 @@ class MainWindow(QMainWindow):
 
     def _on_datos_recibidos(self, datos: str):
         self._parser.alimentar(datos)
-        self._actualizar_peso()
+        self.peso_listo.emit()
 
     def _actualizar_peso(self):
         if self._connection is None or not self._connection.is_open:
