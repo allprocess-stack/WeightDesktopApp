@@ -6,6 +6,8 @@ from ui.main_window import MainWindow
 
 
 def main():
+    """Punto de entrada de la aplicación. Inicializa PyQt6, crea la ventana
+    principal, carga la configuración guardada e inicia la reconexión automática."""
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
 
