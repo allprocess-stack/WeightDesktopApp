@@ -5,6 +5,10 @@ from typing import Callable, Optional
 import serial
 import serial.tools.list_ports
 
+_INTENTOS_MAX = 10
+_DELAY_INICIAL = 1.0
+_DELAY_MAX = 8.0
+
 
 class SerialConnection:
     def __init__(self, on_datos_recibidos: Callable[[str], None]) -> None:
@@ -17,7 +21,23 @@ class SerialConnection:
     def is_open(self) -> bool:
         return self._puerto is not None and self._puerto.is_open
 
-    def abrir(self, nombre_puerto: str) -> None:
+    def abrir(self, nombre_puerto: str, reintentar: bool = False) -> None:
+        """Abre el puerto serie con reintentos opcionales para PermissionError.
+
+        Args:
+            nombre_puerto: Puerto COM a abrir (ej. 'COM2').
+            reintentar: Si True, reintenta hasta _INTENTOS_MAX veces con
+                       backoff exponencial cuando falla con PermissionError.
+
+        Raises:
+            serial.SerialException: Si no se pudo abrir tras todos los intentos.
+        """
+        if reintentar:
+            self._abrir_con_reintentos(nombre_puerto)
+        else:
+            self._abrir_directo(nombre_puerto)
+
+    def _abrir_directo(self, nombre_puerto: str) -> None:
         self.cerrar()
         self._puerto = serial.Serial(
             port=nombre_puerto,
@@ -31,6 +51,25 @@ class SerialConnection:
         self._puerto.rts = True
         self._puerto.reset_input_buffer()
         self._iniciar_lectura()
+
+    def _abrir_con_reintentos(self, nombre_puerto: str) -> None:
+        delay = _DELAY_INICIAL
+        for intento in range(1, _INTENTOS_MAX + 1):
+            try:
+                self._abrir_directo(nombre_puerto)
+                return
+            except serial.SerialException as e:
+                error_str = str(e).lower()
+                es_permission = (
+                    isinstance(e, PermissionError)
+                    or "access is denied" in error_str
+                    or "permissionerror" in error_str
+                    or "denied" in error_str
+                )
+                if not es_permission or intento == _INTENTOS_MAX:
+                    raise
+                time.sleep(delay)
+                delay = min(delay * 1.5, _DELAY_MAX)
 
     def resetear_puerto(self, nombre_puerto: str) -> None:
         try:
