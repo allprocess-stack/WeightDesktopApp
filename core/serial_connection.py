@@ -11,6 +11,10 @@ _DELAY_MAX = 8.0
 
 
 class SerialConnection:
+    """Gestiona la conexión serie con la báscula.
+    Abre el puerto en 9600 8N1 con DTR/RTS habilitados y lanza un hilo
+    de lectura que notifica los datos recibidos vía callback."""
+
     def __init__(self, on_datos_recibidos: Callable[[str], None]) -> None:
         self._puerto: Optional[serial.Serial] = None
         self._hilo_lectura: Optional[threading.Thread] = None
@@ -19,25 +23,10 @@ class SerialConnection:
 
     @property
     def is_open(self) -> bool:
+        """Indica si el puerto serie está actualmente abierto."""
         return self._puerto is not None and self._puerto.is_open
 
-    def abrir(self, nombre_puerto: str, reintentar: bool = False) -> None:
-        """Abre el puerto serie con reintentos opcionales para PermissionError.
-
-        Args:
-            nombre_puerto: Puerto COM a abrir (ej. 'COM2').
-            reintentar: Si True, reintenta hasta _INTENTOS_MAX veces con
-                       backoff exponencial cuando falla con PermissionError.
-
-        Raises:
-            serial.SerialException: Si no se pudo abrir tras todos los intentos.
-        """
-        if reintentar:
-            self._abrir_con_reintentos(nombre_puerto)
-        else:
-            self._abrir_directo(nombre_puerto)
-
-    def _abrir_directo(self, nombre_puerto: str) -> None:
+    def abrir(self, nombre_puerto: str) -> None:
         self.cerrar()
         self._puerto = serial.Serial(
             port=nombre_puerto,
@@ -72,6 +61,8 @@ class SerialConnection:
                 delay = min(delay * 1.5, _DELAY_MAX)
 
     def resetear_puerto(self, nombre_puerto: str) -> None:
+        """Abre y cierra temporalmente el puerto con DTR/RTS activos
+        para forzar al driver USB-serial a resetear su estado interno."""
         try:
             with serial.Serial(
                 port=nombre_puerto,
@@ -89,6 +80,8 @@ class SerialConnection:
             pass
 
     def cerrar(self) -> None:
+        """Cierra el puerto serie, detiene el hilo de lectura
+        y desactiva DTR/RTS."""
         self._corriendo = False
         if self._hilo_lectura is not None and self._hilo_lectura.is_alive():
             self._hilo_lectura.join(timeout=2)
@@ -99,11 +92,14 @@ class SerialConnection:
         self._puerto = None
 
     def _iniciar_lectura(self) -> None:
+        """Lanza el hilo daemon que lee datos del puerto serie en segundo plano."""
         self._corriendo = True
         self._hilo_lectura = threading.Thread(target=self._bucle_lectura, daemon=True)
         self._hilo_lectura.start()
 
     def _bucle_lectura(self) -> None:
+        """Bucle continuo de lectura. Lee datos con read_all() (no bloqueante)
+        y notifica al callback por cada lote recibido."""
         while self._corriendo and self._puerto is not None and self._puerto.is_open:
             try:
                 datos = self._puerto.read_all()
@@ -117,4 +113,5 @@ class SerialConnection:
 
     @staticmethod
     def listar_puertos() -> list[str]:
+        """Devuelve una lista con los nombres de los puertos COM disponibles."""
         return [p.device for p in serial.tools.list_ports.comports()]

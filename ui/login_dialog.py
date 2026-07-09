@@ -7,7 +7,11 @@ from PyQt6.QtWidgets import (
 
 
 class LoginDialog(QDialog):
+    """Diálogo de inicio de sesión para acceder al panel de configuración.
+    Credenciales por defecto: root / systemconfig."""
+
     def __init__(self, parent=None):
+        """Inicializa el diálogo con campos de usuario y contraseña."""
         super().__init__(parent)
         self.setWindowTitle("Iniciar sesión")
         self.setFixedSize(280, 140)
@@ -28,4 +32,5 @@ class LoginDialog(QDialog):
         layout.addRow(botones)
 
     def credenciales(self):
+        """Devuelve una tupla (usuario, contraseña) ingresados por el usuario."""
         return self.usuario_input.text(), self.contrasena_input.text()
