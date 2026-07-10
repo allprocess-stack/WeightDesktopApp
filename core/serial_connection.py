@@ -5,6 +5,10 @@ from typing import Callable, Optional
 import serial
 import serial.tools.list_ports
 
+_INTENTOS_MAX = 10
+_DELAY_INICIAL = 1.0
+_DELAY_MAX = 8.0
+
 
 class SerialConnection:
     """Gestiona la conexión serie con la báscula.
@@ -23,8 +27,6 @@ class SerialConnection:
         return self._puerto is not None and self._puerto.is_open
 
     def abrir(self, nombre_puerto: str) -> None:
-        """Abre el puerto serie con configuración 9600 8N1,
-        DTR/RTS altos, descarta buffer basura e inicia el hilo de lectura."""
         self.cerrar()
         self._puerto = serial.Serial(
             port=nombre_puerto,
@@ -38,6 +40,25 @@ class SerialConnection:
         self._puerto.rts = True
         self._puerto.reset_input_buffer()
         self._iniciar_lectura()
+
+    def _abrir_con_reintentos(self, nombre_puerto: str) -> None:
+        delay = _DELAY_INICIAL
+        for intento in range(1, _INTENTOS_MAX + 1):
+            try:
+                self._abrir_directo(nombre_puerto)
+                return
+            except serial.SerialException as e:
+                error_str = str(e).lower()
+                es_permission = (
+                    isinstance(e, PermissionError)
+                    or "access is denied" in error_str
+                    or "permissionerror" in error_str
+                    or "denied" in error_str
+                )
+                if not es_permission or intento == _INTENTOS_MAX:
+                    raise
+                time.sleep(delay)
+                delay = min(delay * 1.5, _DELAY_MAX)
 
     def resetear_puerto(self, nombre_puerto: str) -> None:
         """Abre y cierra temporalmente el puerto con DTR/RTS activos

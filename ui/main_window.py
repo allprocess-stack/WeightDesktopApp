@@ -31,7 +31,7 @@ class PortOpener(QThread):
         conn = SerialConnection(self.callback)
         conn.resetear_puerto(self.puerto)
         try:
-            conn.abrir(self.puerto)
+            conn.abrir(self.puerto, reintentar=True)
             self.resultado.emit(conn, "")
         except Exception as e:
             conn.cerrar()
@@ -244,8 +244,7 @@ class MainWindow(QMainWindow):
             self._actualizar_estado_conexion(True)
         else:
             self._set_controles_habilitados(True)
-            self._actualizar_estado_conexion(False)
-            QMessageBox.critical(self, "Error", f"No se pudo abrir el puerto: {error}")
+            self._actualizar_estado_conexion(False, error)
 
     def _on_watchdog_open_result(self, conn: object, error: str):
         self._abriendo = False
@@ -257,12 +256,13 @@ class MainWindow(QMainWindow):
             self._peso_label.setText("-----")
             self._actualizar_estado_conexion(True)
         else:
+            self._actualizar_estado_conexion(False, error)
             if self._reintentos_apertura >= 40:
                 self._watchdog.stop()
                 QMessageBox.warning(
                     self, "Error de conexión",
                     f"No se pudo abrir el puerto tras "
-                    f"{self._reintentos_apertura} intentos."
+                    f"{self._reintentos_apertura} intentos: {error}"
                 )
             else:
                 self._watchdog.setInterval(
@@ -283,10 +283,17 @@ class MainWindow(QMainWindow):
             self._lbl_trama.setText("Trama: ---")
             self._lbl_trama.setStyleSheet("color: #888888; padding: 2px 8px;")
 
-    def _actualizar_estado_conexion(self, conectado: bool):
+    def _actualizar_estado_conexion(self, conectado: bool, error: str = ""):
         if conectado:
             self._lbl_conexion.setText("Conectado")
             self._lbl_conexion.setStyleSheet("color: #44FF44; padding: 2px 8px;")
+        elif error:
+            # Mostrar el error completo en la label, truncado si es muy largo
+            texto = f"Error: {error}" if len(error) < 50 else f"Error: {error[:47]}..."
+            self._lbl_conexion.setText(texto)
+            self._lbl_conexion.setStyleSheet(
+                "color: #FF4444; font-size: 9pt; padding: 2px 8px;"
+            )
         else:
             self._lbl_conexion.setText("Desconectado")
             self._lbl_conexion.setStyleSheet("color: #FF4444; padding: 2px 8px;")
