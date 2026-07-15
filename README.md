@@ -11,7 +11,7 @@ Aplicación de escritorio para leer y mostrar el peso de una báscula a través 
 ## Instalación
 
 ```bash
-pip install -r requeriments.txt
+pip install -r requirements.txt
 ```
 
 ## Estructura del proyecto
@@ -21,7 +21,7 @@ DesktopViewWeight/
 ├── main.py                       # Punto de entrada
 ├── setup.py                      # Build para generar .msi (cx_Freeze)
 ├── build_exe.ps1                 # Script para generar .exe (PyInstaller)
-├── requeriments.txt              # Dependencias
+├── requirements.txt              # Dependencias
 ├── config/
 │   ├── __init__.py
 │   └── config_manager.py         # Persistencia JSON de configuración
@@ -29,13 +29,10 @@ DesktopViewWeight/
 │   ├── __init__.py
 │   ├── serial_connection.py      # Conexión serie con hilo de lectura
 │   └── trama_parser.py           # Parser de tramas con buffer thread-safe
-├── ui/
-│   ├── __init__.py
-│   └── main_window.py            # Ventana principal (PyQt6)
-├── utils/
-│   └── __init__.py
-└── data/
-    └── __init__.py
+└── ui/
+    ├── __init__.py
+    ├── login_dialog.py            # Diálogo de login para acceso a configuración
+    └── main_window.py            # Ventana principal (PyQt6)
 ```
 
 ## Flujo de la aplicación
@@ -50,8 +47,9 @@ main()
         ├─> CargarConfiguracion() — lee config.json
         └─> IniciarReconexion() — watchdog automático si hay puerto guardado
   └─> Watchdog_Tick (QTimer)
-        ├─> Fase 1: puerto no existe → reintenta cada 3s (máx 30)
-        └─> Fase 2: puerto existe pero falla → backoff 2.5s→10s (máx 40)
+        ├─> Monitor: si conectado, verifica puerto; si pierde conexión, reinicia
+        ├─> Fase 1: puerto no existe → reintenta cada 1.5s (máx 15)
+        └─> Fase 2: puerto existe pero falla → backoff 1s→5s (máx 20)
   └─> PortOpener (QThread) — apertura asincrona
         ├─> resetear_puerto() → abre/cierra temporal
         └─> abrir() → inicia hilo de lectura
@@ -147,7 +145,7 @@ Para distribuir la aplicación, puedes generar un instalador `.msi` con cx_Freez
 
 ```bash
 # Instalar dependencias
-pip install -r requeriments.txt
+pip install -r requirements.txt
 
 # Generar el .msi
 python setup.py bdist_msi
@@ -165,6 +163,6 @@ El ejecutable se crea en `dist\DesktopViewWeight.exe`.
 
 ---
 
-Todos los derechos reservados - **All Process**  
+Todos los derechos reservados - **All Process S.A.C.**  
 Desarrollado por: **Anthony Josue Laura Perez**  
 GitHub: https://github.com/anthony2004lp

@@ -1,5 +1,7 @@
+import os
 import sys
 
+from PyQt6.QtCore import QCoreApplication
 from PyQt6.QtWidgets import QApplication
 
 from ui.main_window import MainWindow
@@ -8,6 +10,13 @@ from ui.main_window import MainWindow
 def main():
     """Punto de entrada de la aplicación. Inicializa PyQt6, crea la ventana
     principal, carga la configuración guardada e inicia la reconexión automática."""
+
+    if getattr(sys, "frozen", False):
+        base = os.path.dirname(sys.executable)
+        plugins = os.path.join(base, "PyQt6", "Qt6", "plugins")
+        if os.path.isdir(plugins):
+            QCoreApplication.addLibraryPath(plugins)
+
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
 

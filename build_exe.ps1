@@ -27,9 +27,9 @@ pyinstaller --onefile --windowed `
     --hidden-import serial.tools.list_ports_common `
     --hidden-import win32api `
     --hidden-import win32con `
-    --add-data "requeriments.txt;." `
+    --add-data "requirements.txt;." `
     --icon "icon.ico" `
-    --paths "C:\Python314" `
+    --paths "$(Split-Path (Get-Command python).Source -Parent)" `
     main.py
 
 if (-not $?) { Write-Host "Error en PyInstaller" -ForegroundColor Red; exit 1 }
